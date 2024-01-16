@@ -1,0 +1,26 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowS3ActionsWithMfa",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": [
+        "*"
+      ],
+      "Condition": {
+        "Bool": {
+          "aws:MultiFactorAuthPresent": "true"
+        }
+      }
+    },
+    {
+      "Sid": "AllowEc2All",
+      "Effect": "Allow",
+      "Action": "ec2:*",
+      "Resource": [
+        "*"
+      ]
+    }
+  ]
+}

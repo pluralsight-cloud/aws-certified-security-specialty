@@ -1,0 +1,13 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "NotActionDeleteS3",
+      "Effect": "Allow",
+      "NotAction": "s3:DeleteBucket",
+      "Resource": [
+        "arn:aws:s3:::*"
+      ]
+    }
+  ]
+}
