@@ -1,0 +1,21 @@
+# Steps
+sudo su
+
+# Check mounts
+mount
+
+# verify original disk
+ls /dev
+
+# verify new disk is attached
+ls /dev
+
+# Make directory to attach mount
+mkdir /restore
+
+# Make new filesystem on new EBS
+mkfs.xfs /dev/xvdf
+
+# create new mount using new disk and dir
+# copy existing data into new drive and mount
+rsync -R /tmp/*.pdf /restore/
