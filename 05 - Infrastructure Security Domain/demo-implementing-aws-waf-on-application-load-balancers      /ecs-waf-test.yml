@@ -1,0 +1,410 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Metadata:
+  Generator: "former2"
+Description: ""
+Resources:
+  EC2EIP:
+    Type: "AWS::EC2::EIP"
+    Properties:
+      Domain: "vpc"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "ecs-networking-nat-eip-${EC2Subnet.AvailabilityZone}"
+
+  EC2Subnet:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: !GetAtt EC2Subnet4.AvailabilityZone
+      CidrBlock: "10.1.0.0/19"
+      VpcId: !Ref EC2VPC
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: "Name"
+          Value: !Sub "ecs-networking-public-net-${EC2Subnet4.AvailabilityZone}"
+
+  ECSCluster:
+    Type: "AWS::ECS::Cluster"
+    Properties:
+      ClusterName: "hello"
+
+  ECSService:
+    Type: "AWS::ECS::Service"
+    Properties:
+      ServiceName: !Sub "${ECSCluster}-service"
+      Cluster: !GetAtt ECSCluster.Arn
+      LoadBalancers:
+        - TargetGroupArn: !Sub "arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:targetgroup/${ECSCluster}-http-80/04f2b38164f6214e"
+          ContainerName: "world"
+          ContainerPort: 80
+      DesiredCount: 0
+      LaunchType: "FARGATE"
+      PlatformVersion: "1.4.0"
+      TaskDefinition: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/${ECSCluster}-td:4"
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 0
+        DeploymentCircuitBreaker:
+          Enable: false
+          Rollback: false
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: "DISABLED"
+          SecurityGroups:
+            - !Ref EC2SecurityGroup3
+          Subnets:
+            - !Ref EC2Subnet3
+            - !Ref EC2Subnet4
+            - !Ref EC2Subnet5
+            - !Ref EC2Subnet8
+      HealthCheckGracePeriodSeconds: 0
+      SchedulingStrategy: "REPLICA"
+
+  ECSTaskDefinition:
+    Type: "AWS::ECS::TaskDefinition"
+    Properties:
+      ContainerDefinitions:
+        - Cpu: 1024
+          Essential: true
+          Image: !Sub "${ECSCluster}-world"
+          Memory: 4096
+          MemoryReservation: 2048
+          Name: "world"
+          PortMappings:
+            - ContainerPort: 80
+              HostPort: 80
+              Protocol: "tcp"
+          ReadonlyRootFilesystem: false
+      Family: !Sub "${ECSCluster}-td"
+      TaskRoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/${ECSCluster}-ecs-task-execution-role"
+      ExecutionRoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/${ECSCluster}-ecs-task-execution-role"
+      NetworkMode: "awsvpc"
+      RequiresCompatibilities:
+        - "FARGATE"
+      Cpu: "1024"
+      Memory: "4096"
+
+  ApplicationAutoScalingScalingPolicy:
+    Type: "AWS::ApplicationAutoScaling::ScalingPolicy"
+    Properties:
+      PolicyName: !Sub "${ECSCluster}-scale-up-policy"
+      PolicyType: "StepScaling"
+      ResourceId: !Sub "service/${ECSCluster}/${ECSCluster}-service"
+      ScalableDimension: "ecs:service:DesiredCount"
+      ServiceNamespace: "ecs"
+      StepScalingPolicyConfiguration:
+        AdjustmentType: "ChangeInCapacity"
+        Cooldown: 60
+        MetricAggregationType: "Maximum"
+        StepAdjustments: {}
+
+  ApplicationAutoScalingScalingPolicy2:
+    Type: "AWS::ApplicationAutoScaling::ScalingPolicy"
+    Properties:
+      PolicyName: !Sub "${ECSCluster}-scale-down-policy"
+      PolicyType: "StepScaling"
+      ResourceId: !Sub "service/${ECSCluster}/${ECSCluster}-service"
+      ScalableDimension: "ecs:service:DesiredCount"
+      ServiceNamespace: "ecs"
+      StepScalingPolicyConfiguration:
+        AdjustmentType: "ChangeInCapacity"
+        Cooldown: 60
+        MetricAggregationType: "Maximum"
+        StepAdjustments: {}
+
+  ApplicationAutoScalingScalableTarget:
+    Type: "AWS::ApplicationAutoScaling::ScalableTarget"
+    Properties:
+      MaxCapacity: 5
+      MinCapacity: 1
+      ResourceId: !Sub "service/${ECSCluster}/${ECSCluster}-service"
+      RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+      ScalableDimension: "ecs:service:DesiredCount"
+      ServiceNamespace: "ecs"
+      SuspendedState:
+        DynamicScalingInSuspended: false
+        DynamicScalingOutSuspended: false
+        ScheduledScalingSuspended: false
+
+  EC2NatGateway:
+    Type: "AWS::EC2::NatGateway"
+    Properties:
+      SubnetId: !Ref EC2Subnet
+      Tags:
+        - Key: "Name"
+          Value: !Sub "ecs-networking-nat-gw-${EC2Subnet.AvailabilityZone}"
+      AllocationId: !GetAtt EC2EIP.AllocationId
+
+  EC2Route:
+    Type: "AWS::EC2::Route"
+    Properties:
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref EC2NatGateway
+      RouteTableId: "rtb-051d5f3a7c8c63516"
+
+  EC2VPC:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: "10.1.0.0/16"
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: "default"
+      Tags:
+        - Key: "Name"
+          Value: "ecs-networking-vpc"
+
+  EC2VPCGatewayAttachment:
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    Properties:
+      InternetGatewayId: "igw-05477eef6b6c8d740"
+      VpcId: !GetAtt EC2Subnet.VpcId
+
+  EC2SecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "default VPC security group"
+      GroupName: "default"
+      VpcId: !GetAtt EC2Subnet.VpcId
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: "sg-07e19a514975e0151"
+          SourceSecurityGroupOwnerId: !Ref AWS::AccountId
+          IpProtocol: "-1"
+      SecurityGroupEgress:
+        - CidrIp: "0.0.0.0/0"
+          IpProtocol: "-1"
+
+  EC2SecurityGroup2:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Controls access to the Load Balancer"
+      GroupName: !Sub "${ECSCluster}-lb-access-sg"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${ECSCluster}-lb-access-sg"
+      VpcId: !GetAtt EC2Subnet.VpcId
+      SecurityGroupIngress:
+        - CidrIp: "0.0.0.0/0"
+          FromPort: 80
+          IpProtocol: "tcp"
+          ToPort: 80
+      SecurityGroupEgress:
+        - CidrIp: "0.0.0.0/0"
+          IpProtocol: "-1"
+
+  EC2SecurityGroup3:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Allow inbound access from the LB only"
+      GroupName: !Sub "${ECSCluster}-ecs-tasks-sg"
+      Tags:
+        - Key: "Name"
+          Value: !Sub "${ECSCluster}-ecs-tasks-sg"
+      VpcId: !GetAtt EC2Subnet.VpcId
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: !Ref EC2SecurityGroup2
+          SourceSecurityGroupOwnerId: !Ref AWS::AccountId
+          FromPort: 80
+          IpProtocol: "tcp"
+          ToPort: 80
+      SecurityGroupEgress:
+        - CidrIp: "0.0.0.0/0"
+          IpProtocol: "-1"
+
+  ElasticLoadBalancingV2TargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: "/"
+      Port: 80
+      Protocol: "HTTP"
+      HealthCheckPort: "traffic-port"
+      HealthCheckProtocol: "HTTP"
+      HealthCheckTimeoutSeconds: 5
+      UnhealthyThresholdCount: 3
+      TargetType: "ip"
+      Matcher:
+        HttpCode: "200"
+      HealthyThresholdCount: 3
+      VpcId: !GetAtt EC2Subnet.VpcId
+      Name: !Sub "${ECSCluster}-http-80"
+      HealthCheckEnabled: true
+      TargetGroupAttributes:
+        - Key: "stickiness.enabled"
+          Value: "true"
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "300"
+        - Key: "stickiness.app_cookie.cookie_name"
+          Value: ""
+        - Key: "stickiness.type"
+          Value: "lb_cookie"
+        - Key: "stickiness.lb_cookie.duration_seconds"
+          Value: "86400"
+        - Key: "slow_start.duration_seconds"
+          Value: "0"
+        - Key: "stickiness.app_cookie.duration_seconds"
+          Value: "86400"
+        - Key: "load_balancing.algorithm.type"
+          Value: "round_robin"
+
+  EC2Subnet2:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: !GetAtt EC2Subnet3.AvailabilityZone
+      CidrBlock: "10.1.32.0/19"
+      VpcId: !GetAtt EC2Subnet.VpcId
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: "Name"
+          Value: !Sub "ecs-networking-public-net-${EC2Subnet3.AvailabilityZone}"
+
+  EC2Subnet3:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: !Sub "${AWS::Region}b"
+      CidrBlock: "10.1.160.0/19"
+      VpcId: !GetAtt EC2Subnet.VpcId
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: "Name"
+          Value: !Sub "ecs-networking-private-net-${AWS::Region}b"
+
+  EC2Subnet4:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: !Sub "${AWS::Region}a"
+      CidrBlock: "10.1.128.0/19"
+      VpcId: !Ref EC2VPC
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: "Name"
+          Value: !Sub "ecs-networking-private-net-${AWS::Region}a"
+
+  EC2Subnet5:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: !GetAtt EC2Subnet6.AvailabilityZone
+      CidrBlock: "10.1.192.0/19"
+      VpcId: !GetAtt EC2Subnet.VpcId
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: "Name"
+          Value: !Sub "ecs-networking-private-net-${EC2Subnet6.AvailabilityZone}"
+
+  EC2Subnet6:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: !Sub "${AWS::Region}c"
+      CidrBlock: "10.1.64.0/19"
+      VpcId: !GetAtt EC2Subnet.VpcId
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: "Name"
+          Value: !Sub "ecs-networking-public-net-${AWS::Region}c"
+
+  EC2Subnet7:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: !GetAtt EC2Subnet8.AvailabilityZone
+      CidrBlock: "10.1.96.0/19"
+      VpcId: !GetAtt EC2Subnet.VpcId
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: "Name"
+          Value: !Sub "ecs-networking-public-net-${EC2Subnet8.AvailabilityZone}"
+
+  EC2Subnet8:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: !Sub "${AWS::Region}d"
+      CidrBlock: "10.1.224.0/19"
+      VpcId: !GetAtt EC2Subnet.VpcId
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: "Name"
+          Value: !Sub "ecs-networking-private-net-${AWS::Region}d"
+
+  ElasticLoadBalancingV2LoadBalancer:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      Name: !Sub "${ECSCluster}-lb"
+      Scheme: "internet-facing"
+      Type: "application"
+      Subnets:
+        - !Ref EC2Subnet
+        - !Ref EC2Subnet7
+        - !Ref EC2Subnet6
+        - !Ref EC2Subnet2
+      SecurityGroups:
+        - !Ref EC2SecurityGroup2
+      IpAddressType: "ipv4"
+      LoadBalancerAttributes:
+        - Key: "access_logs.s3.enabled"
+          Value: "false"
+        - Key: "idle_timeout.timeout_seconds"
+          Value: "60"
+        - Key: "deletion_protection.enabled"
+          Value: "false"
+        - Key: "routing.http2.enabled"
+          Value: "true"
+        - Key: "routing.http.drop_invalid_header_fields.enabled"
+          Value: "false"
+        - Key: "routing.http.xff_client_port.enabled"
+          Value: "false"
+        - Key: "routing.http.preserve_host_header.enabled"
+          Value: "false"
+        - Key: "routing.http.xff_header_processing.mode"
+          Value: "append"
+        - Key: "routing.http.desync_mitigation_mode"
+          Value: "defensive"
+        - Key: "waf.fail_open.enabled"
+          Value: "false"
+        - Key: "routing.http.x_amzn_tls_version_and_cipher_suite.enabled"
+          Value: "false"
+
+  EC2SubnetNetworkAclAssociation:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      SubnetId: !Ref EC2Subnet
+      NetworkAclId: "acl-07ce8878b2c898bb6"
+
+  EC2SubnetNetworkAclAssociation2:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      SubnetId: !Ref EC2Subnet4
+      NetworkAclId: "acl-07ce8878b2c898bb6"
+
+  EC2SubnetNetworkAclAssociation3:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      SubnetId: !Ref EC2Subnet7
+      NetworkAclId: "acl-07ce8878b2c898bb6"
+
+  EC2SubnetNetworkAclAssociation4:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      SubnetId: !Ref EC2Subnet8
+      NetworkAclId: "acl-07ce8878b2c898bb6"
+
+  EC2SubnetNetworkAclAssociation5:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      SubnetId: !Ref EC2Subnet6
+      NetworkAclId: "acl-07ce8878b2c898bb6"
+
+  EC2SubnetNetworkAclAssociation6:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      SubnetId: !Ref EC2Subnet3
+      NetworkAclId: "acl-07ce8878b2c898bb6"
+
+  EC2SubnetNetworkAclAssociation7:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      SubnetId: !Ref EC2Subnet2
+      NetworkAclId: "acl-07ce8878b2c898bb6"
+
+  EC2SubnetNetworkAclAssociation8:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      SubnetId: !Ref EC2Subnet5
+      NetworkAclId: "acl-07ce8878b2c898bb6"
