@@ -1,0 +1,86 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "CreateOrChange",
+            "Effect": "Allow",
+            "Action": [
+                "iam:CreateUser",
+                "iam:DeleteUserPolicy",
+                "iam:AttachUserPolicy",
+                "iam:DetachUserPolicy",
+                "iam:PutUserPermissionsBoundary",
+                "iam:PutUserPolicy"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "StringEquals": {
+                    "iam:PermissionsBoundary": "arn:aws:iam::%REPLACE%:policy/SooperDooperCompanyBoundaries"
+                }
+            }
+        },
+        {
+            "Sid": "IAMTasks",
+            "Effect": "Allow",
+            "Action": [
+                "iam:GetUser",
+                "iam:ListUsers",
+                "iam:DeleteUser",
+                "iam:UpdateUser",
+                "iam:CreateAccessKey",
+                "iam:CreateLoginProfile",
+                "iam:GetAccountPasswordPolicy",
+                "iam:GetLoginProfile",
+                "iam:ListGroups",
+                "iam:ListGroupsForUser",
+                "iam:CreateGroup",
+                "iam:GetGroup",
+                "iam:DeleteGroup",
+                "iam:UpdateGroup",
+                "iam:CreatePolicy",
+                "iam:DeletePolicy",
+                "iam:DeletePolicyVersion",
+                "iam:GetPolicy",
+                "iam:GetPolicyVersion",
+                "iam:GetUserPolicy",
+                "iam:GetRolePolicy",
+                "iam:ListPolicies",
+                "iam:ListPolicyVersions",
+                "iam:ListEntitiesForPolicy",
+                "iam:ListUserPolicies",
+                "iam:ListAttachedUserPolicies",
+                "iam:ListRolePolicies",
+                "iam:ListAttachedRolePolicies",
+                "iam:SetDefaultPolicyVersion",
+                "iam:SimulatePrincipalPolicy",
+                "iam:SimulateCustomPolicy",
+                "iam:TagUser"
+            ],
+            "NotResource": [
+                "arn:aws:iam::%REPLACE%:user/SooperDooperCloudAdmin",
+                "arn:aws:iam::%REPLACE%:user/cloud_user"
+            ]
+        },
+        {
+            "Sid": "DenyBoundaryPolicyEdits",
+            "Effect": "Deny",
+            "Action": [
+                "iam:CreatePolicyVersion",
+                "iam:DeletePolicy",
+                "iam:DeletePolicyVersion",
+                "iam:SetDefaultPolicyVersion"
+            ],
+            "Resource": [
+                "arn:aws:iam::%REPLACE%:policy/SooperDooperCompanyBoundaries",
+                "arn:aws:iam::%REPLACE%:policy/SooperDooperIamEngineers",
+                "arn:aws:iam::%REPLACE%:policy/SooperDooperIamEngineersBoundaries"
+            ]
+        },
+        {
+            "Sid": "DenyBoundaryDeletion",
+            "Effect": "Deny",
+            "Action": "iam:DeleteUserPermissionsBoundary",
+            "Resource": "*"
+        }
+    ]
+}
